@@ -82,3 +82,4 @@ public class Order extends BaseEntity {
         }
     }
 }
+//생성자에서 연관관계 편의 메서드를 호출해 양방향 관계를 학습할 수 있었다

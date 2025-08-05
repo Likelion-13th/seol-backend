@@ -105,3 +105,4 @@ public class User extends BaseEntity {
         this.recentTotal = newTotal;
     }
 }
+//if를 활용해서 각 상황별로 일관적으로 반응하게 만들었다

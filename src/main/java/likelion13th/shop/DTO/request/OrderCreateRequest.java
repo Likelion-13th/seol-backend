@@ -12,4 +12,4 @@ public class OrderCreateRequest {
     private Long itemId;
     private int quantity;
     private int mileageToUse;
-}
+}//itemid는 long을 활용해 생성

@@ -24,3 +24,4 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // 향후 필요 시 사용할 수 있도록 주석 유지
     //Optional<User> findByKakaoId(String kakaoId);
 }
+//boolean을 통해 참거짓을 표현하는 자료형을 사용

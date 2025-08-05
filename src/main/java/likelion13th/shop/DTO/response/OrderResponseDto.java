@@ -35,3 +35,4 @@ public class OrderResponseDto {
         );
     }
 }
+//여러가지 변수를 생성해서 static을 통해 반환

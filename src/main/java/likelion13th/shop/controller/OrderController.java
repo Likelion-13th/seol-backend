@@ -116,6 +116,6 @@ public class OrderController {
             throw new GeneralException(ErrorCode.INTERNAL_SERVER_ERROR);
         }
     }
-}
+}//if문을 이용해서 주문이 없을 경우를 대비해서 이를 대비하기위한 코드를 짜는것
 
 

@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
-
 public interface ItemRepository  extends JpaRepository<Item, Long>{
     Optional<Item>  findById(Long itemId );
 }
+//findById로 주어진 ID로 카테고리를 조회하고, 없을 경우를 대비해 Optional로 감싸 반환

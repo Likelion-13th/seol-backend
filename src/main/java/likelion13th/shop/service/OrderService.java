@@ -140,3 +140,4 @@ public class OrderService {
     }
 
 }
+//if문들을 활용해 각 상황들을 일관적으로 적용하는 구조 생성

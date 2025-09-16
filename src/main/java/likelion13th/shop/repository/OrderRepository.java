@@ -12,4 +12,3 @@ import java.util.List;
 public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> findByStatusAndCreatedAtBefore(OrderStatus status, LocalDateTime dateTime);
 }
-//public interface로 구현 없이 메서드의 형태만 정의하는 틀로, Spring에서는 자동 구현을 통해 데이터 접근 로직을 간결하게함

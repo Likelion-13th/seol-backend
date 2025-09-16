@@ -15,10 +15,10 @@ public class Address {
     private String zipcode;
 
     @Column(nullable = false)
-    private String address; //
+    private String address;
 
-    @Column(nullable = false)
-    private String addressDetail; //
+    @Column(name = "address_detail", nullable = false)
+    private String addressDetail;
 
     public Address() {
         this.zipcode = "10540";
@@ -26,4 +26,3 @@ public class Address {
         this.addressDetail = "한국항공대학교";
     }
 }
-//기본 생성자에서 실제 주소 값을 기본값으로 설정해, 테스트나 디폴트 상황에서도 의미 있는 Address 객체를 제공하는것을 학습

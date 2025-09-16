@@ -1,12 +1,11 @@
 package likelion13th.shop.service;
 
-import jakarta.transaction.Transactional;
-import likelion13th.shop.DTO.response.ItemResponseDto;
+import likelion13th.shop.DTO.response.ItemResponse;
 import likelion13th.shop.domain.Category;
+import likelion13th.shop.domain.Item;
 import likelion13th.shop.global.api.ErrorCode;
 import likelion13th.shop.global.exception.GeneralException;
 import likelion13th.shop.repository.CategoryRepository;
-
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -18,11 +17,22 @@ import java.util.stream.Collectors;
 public class CategoryService {
     private final CategoryRepository categoryRepository;
 
-    @Transactional
-    public List<ItemResponseDto> getItemsByCategoryId(Long categoryId){
-        Category category=categoryRepository.findById(categoryId)
-                .orElseThrow(()->new GeneralException(ErrorCode.CATEGORY_NOT_FOUND));
-        return category.getItems().stream().map(ItemResponseDto::from).collect(Collectors.toList());
+    /** 카테고리 존재 여부 확인 **/
+    // 이런 식으로 검증하는 메서드를 따로 만들어서 재사용성 높일 수 있음
+    public Category findCategoryById(Long categoryId){
+        return categoryRepository.findById(categoryId)
+                .orElseThrow(()-> new GeneralException(ErrorCode.CATEGORY_NOT_FOUND));
+    }
+
+    /** 카테고리 별 상품 목록 조회 **/
+    // DTO에 담아서 반환
+    public List<ItemResponse> getItemsByCategory(Long categoryId) {
+        // 카테고리 유효성 검사
+        Category category = findCategoryById(categoryId);
+
+        List<Item> items = category.getItems();
+        return items.stream()
+                .map(ItemResponse::from)
+                .collect(Collectors.toList());
     }
 }
-//Transactional은 메서드 내 데이터베이스 작업이 전부 성공할 때만 적용되도록 보장하는 안전장치

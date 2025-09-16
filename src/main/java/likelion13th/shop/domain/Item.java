@@ -10,7 +10,6 @@ import java.util.List;
 
 @Entity
 @Getter
-@Setter
 @Table(name = "item")
 @NoArgsConstructor
 @AllArgsConstructor
@@ -34,23 +33,13 @@ public class Item extends BaseEntity {
     private String brand;
 
     @Column(nullable = false)
-    @Setter
     private boolean isNew= false;
 
     //Category와 다대다 연관관계 설정
-    @ManyToMany(mappedBy = "items") //알잘딱으로 해줌(manytomany)
+    @ManyToMany(mappedBy = "items")
     private List<Category> categories = new ArrayList<>();
 
-    //Order과 일대다 연관관계 설정
-    @OneToMany(mappedBy = "item", cascade = CascadeType.ALL)
-    @JsonIgnore
-    private List<Order> orders = new ArrayList<>();
 
-    public Item(String item_name, int price, String thumbnail_img, String brand, boolean isNew) {
-        this.itemName = item_name;
-        this.price = price;
-        this.imagePath = imagePath;
-        this.brand = brand;
-        this.isNew= false;
-    }
-}//colume을 활용해서 테이블과 변수를 매핑하였다
+    /** Order과 일대다 연관관계 설정
+     * -> Item에서 Order의 목록을 볼 일이 없으므로 단방향 처리 **/
+}

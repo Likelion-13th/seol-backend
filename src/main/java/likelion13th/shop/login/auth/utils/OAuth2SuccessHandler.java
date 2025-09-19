@@ -63,11 +63,11 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
         String frontendRedirectUri = request.getParameter("redirect_uri");
         List<String> authorizedUris = List.of(
-                "프론트 배포 URL을 넣어주세요",
+                "https://seolshop.netlify.app/",
                 "http://localhost:3000"
         );
         if (frontendRedirectUri == null || !authorizedUris.contains(frontendRedirectUri)) {
-            frontendRedirectUri = "프론트 배포 URL을 넣어주세요";
+            frontendRedirectUri = "https://seolshop.netlify.app/";
         }
 
         String redirectUrl = UriComponentsBuilder
@@ -91,4 +91,7 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 JWT 미발급/오발급 시 프런트가 인증 상태를 설정하지 못해 즉시 로그아웃 상태로 보이거나 권한 자원이 401/403을 유발합니다.
 리다이렉트 검증이 없으면 임의의 외부 URL로 토큰이 유출될 수 있는 오픈 리다이렉트 취약점이 생김.
 PII(개인식별정보)를 그대로 로그에 남기면 보안/컴플라이언스 리스크가 커짐.
+
+
+ */
 

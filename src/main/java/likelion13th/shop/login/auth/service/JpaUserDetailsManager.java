@@ -86,3 +86,5 @@ OAuth2/JWT 흐름에서 `UserDetails` ↔ 도메인 `User` 간 변환 지점을 
 기본 InMemory/Jdbc 기반 매니저로는 `providerId`, `address`, `usernickname` 등 프로젝트 도메인 필드를 다루기 어려워 비즈니스 로직 분기가 복잡해짐.
 `loadUserByUsername`이 잘못 구현되면 인증 성공 후 SecurityContext에 잘못된 주체가 들어가 인가 실패(403)나 NPE가 발생.
 `createUser`에서 `UserDetails` 캐스팅/매핑이 틀리면 DB에 잘못된 유저가 저장되거나 런타임 ClassCastException으로 가입 플로우가 중단.
+
+ */

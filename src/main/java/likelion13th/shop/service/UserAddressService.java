@@ -1,42 +1,47 @@
-package likelion13th.shop.controller;
+package likelion13th.shop.service;
 
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import likelion13th.shop.DTO.response.ItemResponse;
-import likelion13th.shop.global.api.ApiResponse;
-import likelion13th.shop.global.api.SuccessCode;
-import likelion13th.shop.service.CategoryService;
+import likelion13th.shop.domain.User;
+import likelion13th.shop.domain.Address;
+import likelion13th.shop.DTO.request.AddressRequest;
+import likelion13th.shop.DTO.response.AddressResponse;
+import likelion13th.shop.global.api.ErrorCode;
+import likelion13th.shop.global.exception.CustomException;
+import likelion13th.shop.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
-import java.util.List;
-
-@Tag(name = "카테고리", description = "카테고리 관련 API 입니다.")
-@RestController
-@RequestMapping("/categories")
+@Service
 @RequiredArgsConstructor
-public class CategoryController {
-    private final CategoryService categoryService;
+public class UserAddressService {
 
-    // 상품 조회(카테고리별)
-    // 컨트롤러에서 Optional 처리하고 있음
-    // 컨트롤러에서는 예외처리만 하고자 함!
-    /** 카테고리 별 상품 조회**/
-    @GetMapping("/{categoryId}/items")
-    @Operation(summary = "카테고리별 상품 조회", description = "상품을 카테고리 별로 조회합니다.")
-    public ApiResponse<?> getItemsByCategory(@PathVariable Long categoryId) {
-        List<ItemResponse> items = categoryService.getItemsByCategory(categoryId);
+    private final UserRepository userRepository;
 
-        //상품 없을 시 : 성공 응답 + 빈 리스트 반환
-        if (items.isEmpty()) {
-            return ApiResponse.onSuccess(SuccessCode.CATEGORY_ITEMS_EMPTY, Collections.emptyList());
-        }
+    // 사용자 주소 저장 (기본값 또는 변경)
+    @Transactional
+    public AddressResponse saveAddress(String providerId, AddressRequest request) {
+        User user = userRepository.findByProviderId(providerId)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
 
-        return ApiResponse.onSuccess(SuccessCode.CATEGORY_ITEMS_GET_SUCCESS, items);
+        // 사용자가 입력한 값이 없을 경우 기본 주소 사용
+        String zipcode = request.getZipcode();
+        String address = request.getAddress();
+        String detail = request.getAddressDetail();
 
+        // 새로운 주소 설정
+        Address newAddress = new Address(zipcode, address, detail);
+        user.updateAddress(newAddress); // User 엔티티에 주소 업데이트
+        userRepository.save(user); // 변경 사항 저장
+
+        return new AddressResponse(user.getAddress());
+    }
+
+    // 사용자 주소 조회 (기본값 -> 항공대로 제공)
+    @Transactional(readOnly = true)
+    public AddressResponse getAddress(String providerId) {
+        User user = userRepository.findByProviderId(providerId)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+        return new AddressResponse(user.getAddress());
     }
 }

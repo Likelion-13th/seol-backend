@@ -40,7 +40,7 @@ public class OAuth2UserServiceImpl extends DefaultOAuth2UserService {
                 Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER")),
                 extendAttributes,
                 "provider_id"
-        )
+        );
         
     }
     
@@ -65,5 +65,6 @@ getName()이 기대하는 provider_id가 아니어서 신규 가입/토큰 발�
   return new DefaultOAuth2User(
       Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER")),
       extended,
-      "provider_id" // getName() == provider_id
-  );
+      "provider_id" // getName() == provider_id);
+
+ */

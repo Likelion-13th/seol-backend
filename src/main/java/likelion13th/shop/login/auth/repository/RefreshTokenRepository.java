@@ -29,3 +29,5 @@ JPA 기본 CRUD + 사용자별 토큰 조회/삭제 기능 제공.
 findByUser 없으면 사용자별 RefreshToken 관리 불가 → 재발급 시 토큰 검증 불가.
 deleteByUser 구현 누락 시 로그아웃 시점에 토큰 무효화 불가 → 탈취 위험 지속.
 @Modifying 빠지면 DELETE JPQL이 실행되지 않아 실제 DB 반영 안 됨.
+
+ */

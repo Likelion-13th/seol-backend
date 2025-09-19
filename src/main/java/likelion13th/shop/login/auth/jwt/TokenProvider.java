@@ -19,6 +19,20 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.stream.Collectors;
 
+/**
+ * TokenProvider
+ * - JWT(Access/Refresh) 생성·검증·파싱을 담당
+ *
+ * 토큰 설계:
+ * - subject(sub): providerId(카카오 고유 ID)를 저장
+ * - iat(발급시각), exp(만료시각) 기본 포함
+ * - authorities(문자열): Access Token에만 포함, Refresh Token에는 포함하지 않음
+ *
+ * 서명 알고리즘:
+ * - HS256 (대칭키) 사용
+ * - secretKey는 32바이트(256비트) 이상이 권장됨 (jjwt Keys.hmacShaKeyFor 요구사항)
+ *   예: 환경변수에 충분히 긴 랜덤 바이트를 Base64로 넣어 사용
+ */
 @Slf4j
 @Component
 public class TokenProvider {
@@ -27,34 +41,70 @@ public class TokenProvider {
     private final long accessTokenExpiration;
     private final long refreshTokenExpiration;
 
+    /**
+     * 생성자: 설정(application.yml / 환경변수)에서 키와 만료 시간 주입
+     *
+     * @param secretKey              HS256 서명용 시크릿 (32바이트 이상 권장)
+     * @param accessTokenExpiration  Access Token 만료(ms)
+     * @param refreshTokenExpiration Refresh Token 만료(ms)
+     *
+     * 예시(yml):
+     *   JWT_SECRET: ${JWT_SECRET}
+     *   JWT_EXPIRATION: 900000        # 15분
+     *   JWT_REFRESH_EXPIRATION: 1209600000 # 14일
+     */
     public TokenProvider(
             @Value("${JWT_SECRET}") String secretKey,
             @Value("${JWT_EXPIRATION}") long accessTokenExpiration,
-            @Value("${JWT_REFRESH_EXPIRATION}") long refreshTokenExpiration) {
+            @Value("${JWT_REFRESH_EXPIRATION}") long refreshTokenExpiration
+    ) {
+
         this.secretKey = Keys.hmacShaKeyFor(secretKey.getBytes());
         this.accessTokenExpiration = accessTokenExpiration;
         this.refreshTokenExpiration = refreshTokenExpiration;
     }
 
+
+    /**
+     * AccessToken 및 RefreshToken 동시 생성
+     * - UserDetails에서 providerId(username)와 권한을 읽어 AccessToken에만 권한을 claim으로 넣는다.
+     */
     public JwtDto generateTokens(UserDetails userDetails) {
         log.info("JWT 생성 시작: 사용자 {}", userDetails.getUsername());
+
+        // username == providerId (우리 서비스 정책)
         String userId = userDetails.getUsername();
+
+        // 권한 목록을 "ROLE_USER,ROLE_ADMIN" 형태의 문자열로 직렬화 (AccessToken에만 저장)
         String authorities = userDetails.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.joining(","));
+
+        // Access Token 생성 (권한 포함)
         String accessToken = createToken(userId, authorities, accessTokenExpiration);
+
+        // Refresh Token 생성 (권한 불포함: 재발급 용도로만 사용)
         String refreshToken = createToken(userId, null, refreshTokenExpiration);
+
         log.info("Access/Refresh 토큰 생성 완료 (userId: {})", userId);
         return new JwtDto(accessToken, refreshToken);
     }
 
+    /**
+     * 공통 JWT 생성 로직
+     *
+     * @param providerId     사용자 식별자(= provider_id) → JWT의 subject로 저장
+     * @param authorities    권한 문자열 (Access 전용, 예: "ROLE_USER,ROLE_ADMIN")
+     * @param expirationTime 만료 시간(ms)
+     */
     private String createToken(String providerId, String authorities, long expirationTime) {
         JwtBuilder jwtBuilder = Jwts.builder()
-                .setSubject(providerId)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
-                .signWith(secretKey, SignatureAlgorithm.HS256);
+                .setSubject(providerId)                                   // sub
+                .setIssuedAt(new Date())                                  // iat
+                .setExpiration(new Date(System.currentTimeMillis() + expirationTime)) // exp
+                .signWith(secretKey, SignatureAlgorithm.HS256);           // 서명
 
+        // Access Token에만 권한을 실어 보낸다.
         if (authorities != null) {
             jwtBuilder.claim("authorities", authorities);
         }
@@ -62,19 +112,29 @@ public class TokenProvider {
         return jwtBuilder.compact();
     }
 
+    /**
+     * 토큰 유효성 검증
+     * - 서명/구조/만료 등을 검증하고, 예외가 없으면 유효한 것으로 간주
+     */
     public boolean validateToken(String token) {
         try {
             Jwts.parserBuilder()
                     .setSigningKey(secretKey)
                     .build()
-                    .parseClaimsJws(token);
+                    .parseClaimsJws(token); // 파싱 성공 == 유효
             return true;
         } catch (JwtException e) {
+            // SignatureException, MalformedJwtException, ExpiredJwtException 등 모두 포함
             log.warn("JWT 검증 실패: {}", e.getClass().getSimpleName());
             return false;
         }
     }
 
+    /**
+     * 토큰에서 Claims 추출
+     * - 만료(ExpiredJwtException) 시 예외를 상위로 던져 호출부에서 별도 처리
+     * - 그 외 파싱 실패는 TOKEN_INVALID로 래핑
+     */
     public Claims parseClaims(String token) {
         try {
             return Jwts.parserBuilder()
@@ -84,13 +144,18 @@ public class TokenProvider {
                     .getBody();
         } catch (ExpiredJwtException e) {
             log.warn("토큰 만료: {}", e.getClass().getSimpleName());
-            throw e;
+            throw e; // 재발급 플로우 등 호출부에서 만료를 구분 처리
         } catch (JwtException e) {
             log.warn("JWT 파싱 실패: {}", e.getClass().getSimpleName());
             throw new GeneralException(ErrorCode.TOKEN_INVALID);
         }
     }
 
+    /**
+     * Claims → 권한 정보 복원
+     * - "ROLE_USER,ROLE_ADMIN" 문자열을 SimpleGrantedAuthority 리스트로 변환
+     * - 권한이 없으면 기본 ROLE_USER 부여 (게스트 최소 권한)
+     */
     public Collection<? extends GrantedAuthority> getAuthFromClaims(Claims claims) {
         String authoritiesString = claims.get("authorities", String.class);
         if (authoritiesString == null || authoritiesString.isEmpty()) {
@@ -102,6 +167,10 @@ public class TokenProvider {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 만료 허용 파싱
+     * - 만료된 토큰이라도 Claims만 뽑아 써야 하는 경우(예: Refresh로 재발급) 사용
+     */
     public Claims parseClaimsAllowExpired(String token) {
         try {
             return Jwts.parserBuilder()
@@ -110,37 +179,19 @@ public class TokenProvider {
                     .parseClaimsJws(token)
                     .getBody();
         } catch (ExpiredJwtException e) {
+            // 만료됐지만 payload(Claims)는 안전하게 획득 가능
             return e.getClaims();
         }
     }
 }
+
 /*
-1) 왜 필요한가
-카카오 원본 attributes를 우리 서비스 표준 키로 정규화하기 위해 필요.
- (id → provider_id, properties.nickname → nickname)
-Spring Security가 principal의 name으로 사용할 키를 명확히 지정해 이후 핸들러/서비스가 동일 식별자(provider_id)로 동작하게 만듭니다.
-
-2) 없으면/틀리면?
-getName()이 우리가 기대하는 provider_id가 아니어서 신규 가입/토큰 발급 등 후속 로직이 깨짐.
-닉네임 키가 일관되지 않아 화면/로그/저장 로직에서 속성명이 뒤섞임.
-
-3) 핵심 설계 포인트(코드와 함께)
-표준 키 확장: 원본 복사 후 명시 키 추가
-  Map<String, Object> extended = new HashMap<>(oAuth2User.getAttributes());
-  extended.put("provider_id", providerId);
-  extended.put("nickname", nickname);
-
-Security 식별 키 고정: nameAttributeKey를 provider_id로 지정
-  return new DefaultOAuth2User(
-      Collections.singleton(new SimpleGrantedAuthority("ROLE_USER")),
-      extended,
-      "provider_id" // getName() == provider_id
-  );
-
-최소 권한 부여: 최초 로그인 사용자는 ROLE_USER로 시작
-  Collections.singleton(new SimpleGrantedAuthority("ROLE_USER"));
-
-입력 정규화의 위치: OAuth2UserService 레벨에서 한 번에 표준화하여
-  이후 계층이 provider_id/nickname만 신뢰하면 되도록 단순화.
-*/
-
+ * [실무 팁]
+ * 1) 토큰/시크릿키를 절대 로그로 직접 출력하지 않기 (특히 Production)
+ * 2) 전송은 반드시 HTTPS로만 (중간자 공격 방지)
+ * 3) 키 순환(Key Rotation)을 고려: kid 헤더 도입 → 키 변경 시점에 대비
+ * 4) Clock Skew(서버-클라이언트 시계 차) 허용이 필요하면 parserBuilder().setAllowedClockSkewSeconds(...) 활용
+ * 5) Refresh Token 저장 전략:
+ *    - DB/Redis 등에 블랙리스트/화이트리스트로 관리하거나, 최신 토큰만 유효하도록 설계
+ * 6) 쿠키로 전달할 때는 HttpOnly + Secure + SameSite 옵션을 반드시 설정
+ */

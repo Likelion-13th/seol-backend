@@ -25,4 +25,20 @@ spring:
 
 JWT_SECRET: ${JWT_SECRET}
 JWT_EXPIRATION: ${JWT_EXPIRATION}                  # Access(ms)
-JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION}  # Refresh(ms)
+JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION}  # Refresh(ms)\
+
+---
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/sajang_db
+    username: sajang_user
+    password: sajang_password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true

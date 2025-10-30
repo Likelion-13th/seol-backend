@@ -49,6 +49,9 @@ dependencies {
 	//env
 	implementation 'io.github.cdimascio:dotenv-java:3.0.0'
 
+	//AWS와 통합된 다양한 서비스를 사용할 수 있도록 함
+	implementation 'org.springframework.cloud:spring-cloud-starter-aws:2.2.6.RELEASE'
+
 
 
 	//mac only

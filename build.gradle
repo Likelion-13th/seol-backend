@@ -57,3 +57,7 @@ dependencies {
 	//mac only
 	//runtimeOnly 'io.netty:netty-resolver-dns-native-macos:4.1.104.Final:osx-aarch_64'
 }
+
+tasks.named('jar') {
+	enabled = false
+}

@@ -4,6 +4,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import likelion13th.shop.domain.Address;
 import likelion13th.shop.domain.User;
+import likelion13th.shop.global.api.ErrorCode;
+import likelion13th.shop.global.exception.GeneralException;
 import likelion13th.shop.login.auth.dto.JwtDto;
 import likelion13th.shop.login.auth.jwt.CustomUserDetails;
 import likelion13th.shop.login.auth.service.JpaUserDetailsManager;
@@ -11,87 +13,88 @@ import likelion13th.shop.login.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
-@RequiredArgsConstructor
 @Component
+@RequiredArgsConstructor
 public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
-    private final JpaUserDetailsManager jpaUserDetailsManager;
-    private final UserService userService;
+    private final JpaUserDetailsManager jpaUserDetailsManager; // Security 사용자 저장/조회 담당
+    private final UserService userService;                     // JWT 발급 및 RefreshToken 저장 로직
+
+    private static final List<String> ALLOWED_ORIGINS = List.of(
+            "https://jimalshop.netlify.app",
+            "http://localhost:3000"
+    );
+    private static final String DEFAULT_FRONT_ORIGIN = "https://jimalshop.netlify.app";
 
     @Override
-    public void onAuthenticationSuccess(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            Authentication authentication
-    ) throws IOException {
-        DefaultOAuth2User oAuth2User = (DefaultOAuth2User) authentication.getPrincipal();
+    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
+        try {
+            // 1️⃣ providerId, nickname 추출
+            DefaultOAuth2User oAuth2User = (DefaultOAuth2User) authentication.getPrincipal();
+            String providerId = String.valueOf(oAuth2User.getAttributes().getOrDefault("provider_id", oAuth2User.getAttributes().get("id")));
+            String nickname = (String) oAuth2User.getAttributes().get("nickname");
+            log.info("// [OAuth2Success] providerId={}, nickname={}", providerId, nickname);
 
-        String providerId = (String) oAuth2User.getAttribute("provider_id");
-        String nickname   = (String) oAuth2User.getAttribute("nickname");
+            // 2️⃣ 신규 회원 등록 여부 확인 후 없으면 생성
+            if (!jpaUserDetailsManager.userExists(providerId)) {
+                User newUser = User.builder()
+                        .providerId(providerId)
+                        .usernickname(nickname)
+                        .deletable(true)
+                        .build();
 
-        String maskedPid  = (providerId != null && providerId.length() > 4) ? providerId.substring(0, 4) + "***" : "***";
-        String maskedNick = (nickname != null && !nickname.isBlank()) ? "*(hidden)*" : "(none)";
-        log.info("OAuth2 Success - providerId(masked)={}, nickname={}", maskedPid, maskedNick);
+                // 예시 주소 설정 (테스트용)
+                newUser.setAddress(new Address("10540", "경기도 고양시 덕양구 항공대학로 76", "한국항공대학교"));
+                log.info("// 신규 회원 address 확인: {}", newUser.getAddress().getAddress());
 
-        if (!jpaUserDetailsManager.userExists(providerId)) {
-            User newUser = User.builder()
-                    .providerId(providerId)
-                    .usernickname(nickname)
-                    .deletable(true)
-                    .build();
+                CustomUserDetails userDetails = new CustomUserDetails(newUser);
+                jpaUserDetailsManager.createUser(userDetails);
+                log.info("// 신규 회원 등록 완료 (provider_id={})", providerId);
+            } else {
+                log.info("// 기존 회원 로그인 (provider_id={})", providerId);
+            }
 
-            newUser.setAddress(new Address("10540", "경기도 고양시 덕양구 항공대학로 76", "한국항공대학교"));
+            // 3️⃣ JWT 발급 및 RefreshToken 저장
+            JwtDto jwt = userService.jwtMakeSave(providerId);
+            log.info("// JWT 발급 완료 (provider_id={})", providerId);
 
-            CustomUserDetails userDetails = new CustomUserDetails(newUser);
-            jpaUserDetailsManager.createUser(userDetails);
-            log.info("신규 회원 등록 완료 - providerId(masked)={}", maskedPid);
-        } else {
-            log.info("기존 회원 로그인 - providerId(masked)={}", maskedPid);
+            // 4️⃣ 세션에서 redirect origin 회수 후 제거
+            String frontendRedirectOrigin = (String) request.getSession().getAttribute("FRONT_REDIRECT_URI");
+            request.getSession().removeAttribute("FRONT_REDIRECT_URI");
+
+            // 5️⃣ 화이트리스트 재검증
+            if (frontendRedirectOrigin == null || !ALLOWED_ORIGINS.contains(frontendRedirectOrigin)) {
+                frontendRedirectOrigin = DEFAULT_FRONT_ORIGIN;
+            }
+
+            // 6️⃣ 최종 리다이렉트 URL 생성 (accessToken 포함)
+            String redirectUrl = UriComponentsBuilder
+                    .fromUriString(frontendRedirectOrigin)
+                    .queryParam("accessToken", URLEncoder.encode(jwt.getAccessToken(), StandardCharsets.UTF_8))
+                    .build(true)
+                    .toUriString();
+
+            log.info("// [OAuth2Success] Redirecting to {}", redirectUrl);
+            response.sendRedirect(redirectUrl);
+
+        } catch (GeneralException e) {
+            log.error("// [OAuth2Success] GeneralException: {}", e.getReason().getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("// [OAuth2Success] Unexpected Error: {}", e.getMessage());
+            throw new GeneralException(ErrorCode.INTERNAL_SERVER_ERROR);
         }
-
-        JwtDto jwt = userService.jwtMakeSave(providerId);
-        log.info("JWT 발급 완료 - providerId(masked)={}", maskedPid);
-
-        String frontendRedirectUri = request.getParameter("redirect_uri");
-        List<String> authorizedUris = List.of(
-                "https://seolshop.netlify.app/",
-                "http://localhost:3000"
-        );
-        if (frontendRedirectUri == null || !authorizedUris.contains(frontendRedirectUri)) {
-            frontendRedirectUri = "https://seolshop.netlify.app/";
-        }
-
-        String redirectUrl = UriComponentsBuilder
-                .fromUriString(frontendRedirectUri)
-                .queryParam("accessToken", jwt.getAccessToken())
-                .build()
-                .toUriString();
-
-        log.info("Redirecting to authorized frontend host: {}", frontendRedirectUri);
-
-        response.sendRedirect(redirectUrl);
     }
 }
-/*
-1) 왜 필요한가? OAuth2 인증 성공 이후 후속 처리(신규 회원 가입, JWT 발급, 프런트로 리다이렉트)를 한 지점에서 수행해 로그인 플로우를 표준화.
-- 정규화된 attributes(provider_id/nickname)를 사용해 DB 사용자와 보안 컨텍스트를 일관되게 연결.
-- 오픈 리다이렉트 방지(허용 리스트)와 PII 마스킹 로깅으로 보안과 운영 안정성을 확보.
-
-2) 없으면/틀리면?
-신규 사용자 자동 가입/기존 사용자 인식이 누락되어 로그인 후 화면 진입이 실패하거나 매번 수동 가입이 필요.
-JWT 미발급/오발급 시 프런트가 인증 상태를 설정하지 못해 즉시 로그아웃 상태로 보이거나 권한 자원이 401/403을 유발합니다.
-리다이렉트 검증이 없으면 임의의 외부 URL로 토큰이 유출될 수 있는 오픈 리다이렉트 취약점이 생김.
-PII(개인식별정보)를 그대로 로그에 남기면 보안/컴플라이언스 리스크가 커짐.
-
-
- */
-

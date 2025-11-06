@@ -23,7 +23,7 @@ public class AuthController {
             "https://seolshop.netlify.app/",
             "http://localhost:3000"
     );
-    private static final String DEFAULT_FRONT_ORIGIN = "https://jimalshop.netlify.app";
+    private static final String DEFAULT_FRONT_ORIGIN = "https://seolshop.netlify.app/";
 
     @Operation(summary = "카카오 로그인 시작", description = "redirect_uri를 검증·저장 후 카카오 인가로 리다이렉트합니다.")
     @GetMapping("/start/kakao")
